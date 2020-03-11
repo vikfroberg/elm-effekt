@@ -127,6 +127,11 @@ call cmd get set model =
             Fail e
 
 
+callWith : (x -> Cmd msg) -> (x -> model -> Remote e a) -> (x -> Remote e a -> model -> model) -> x -> model -> State e a ( model, Cmd msg )
+callWith toCmd toGet toSet x model =
+    call (toCmd x) (toGet x) (toSet x) model
+
+
 getIndex = .index
 setIndex x model = { model | index = x }
 
@@ -162,9 +167,9 @@ with a fn =
     fn a
 
 
-fetchIndex = toCmdWithDelay 1000 (RecvIndex <| Ok [ "1", "2", "3" ])
-fetchItem id = toCmdWithDelay 1000 (RecvItem id <| Ok { id = id, comments = [ "1", "2", "3" ] })
-fetchComment id = toCmdWithDelay 1000 (RecvComment id <| Ok { id = id })
+fetchIndex = msgToCmdWithDelay 1000 (RecvIndex <| Ok [ "1", "2", "3" ])
+fetchItem id = msgToCmdWithDelay 1000 (RecvItem id <| Ok { id = id, comments = [ "1", "2", "3" ] })
+fetchComment id = msgToCmdWithDelay 1000 (RecvComment id <| Ok { id = id })
 
 
 do : (model -> State e a p) -> (a -> model -> State e b p) -> model -> State e b p
@@ -267,22 +272,19 @@ load_ : Model -> State HttpError () ( Model, Cmd Msg )
 load_ model =
     with model <|
         do (call fetchIndex getIndex setIndex) <| \ids ->
-        do (sequence (\id -> call (fetchItem id) (getItem id) (setItem id)) ids) <| \items ->
-            sequence (\item ->
-                all (\id -> call (fetchComment id) (getComment id) (setComment id)) item.comments
-            )
-            items
-            |> mapTo ()
+        do (ids |> sequence (callWith fetchItem getItem setItem)) <| \items ->
+        do (items |> sequence (.comments >> all (callWith fetchComment getComment setComment))) <| \_ ->
+            succeed ()
 
 
-toCmd : msg -> Cmd msg
-toCmd msg =
+msgToCmd : msg -> Cmd msg
+msgToCmd msg =
     Task.perform identity
         (Task.succeed msg)
 
 
-toCmdWithDelay : Float -> msg -> Cmd msg
-toCmdWithDelay delay msg =
+msgToCmdWithDelay : Float -> msg -> Cmd msg
+msgToCmdWithDelay delay msg =
     Task.perform identity
         (Process.sleep delay
             |> Task.andThen (\_ -> Task.succeed msg)
