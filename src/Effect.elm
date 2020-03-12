@@ -15,11 +15,11 @@ return =
     pure
 
 
-run : (a -> ( model, Cmd msg )) -> (e -> ( model, Cmd msg )) -> Effect e a model (Cmd msg) -> ( model, Cmd msg )
-run handleSuccess handleFailure effect =
+run : (List cmd -> cmds) -> (a -> ( model, cmds )) -> (e -> ( model, cmds )) -> Effect e a model cmd -> ( model, cmds )
+run combine handleSuccess handleFailure effect =
     case effect of
         Perform ( model, cmdList ) ->
-            ( model, Cmd.batch cmdList )
+            ( model, combine cmdList )
 
         Succeed a ->
             handleSuccess a

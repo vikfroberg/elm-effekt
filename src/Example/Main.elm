@@ -1,4 +1,4 @@
-module Main exposing (main)
+module Example.Main exposing (main)
 
 import Browser
 import Html exposing (Html)
@@ -70,7 +70,7 @@ runEffects : Model -> ( Model, Cmd Msg )
 runEffects model =
     effect
         |> Effect.with model
-        |> Effect.run (doNothing model) (doNothing model)
+        |> Effect.run Cmd.batch (doNothing model) (doNothing model)
 
 
 effect : Model -> Effect HttpError () Model (Cmd Msg)
