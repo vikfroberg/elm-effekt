@@ -1,7 +1,5 @@
 module Effect exposing (..)
 
-import Prelude exposing (..)
-
 
 type Effect e a cmd
     = Succeed a

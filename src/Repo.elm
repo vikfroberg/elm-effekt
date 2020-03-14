@@ -1,29 +1,29 @@
 module Repo exposing (..)
 
 import Remote exposing (Remote)
-import Cache exposing (Cache)
+import AssocList as Dict exposing (Dict)
 import Focus exposing (Focus)
 import StateEffect exposing (StateEffect)
 
 
 type Repo id e a
-    = Repo (Cache id (Remote e a))
+    = Repo (Dict id (Remote e a))
 
 
 empty : Repo id e a
 empty =
-    Repo Cache.empty
+    Repo Dict.empty
 
 
 get : id -> Repo id e a -> Remote e a
 get id (Repo cache) = 
-    Cache.get id cache
+    Dict.get id cache
         |> Maybe.withDefault Remote.empty
 
 
 set : id -> Remote e a -> Repo id e a -> Repo id e a
 set id a (Repo cache) = 
-    Cache.set id a cache
+    Dict.insert id a cache
         |> Repo
 
 
