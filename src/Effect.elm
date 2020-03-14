@@ -1,121 +1,89 @@
 module Effect exposing (..)
 
+import Prelude exposing (..)
 
-type Effect e a model cmd
-    = Perform ( model, List cmd )
+
+type Effect e a cmd
+    = Succeed a
     | Fail e
-    | Succeed a
+    | Load (List cmd)
 
 
-pure = 
-    Succeed >> always
+wait = Load []
+pure a = Succeed a
+fail e = Fail e
+load cmds = Load cmds
 
 
-return = 
-    pure
+append eff acc =
+    case acc of
+        Load cmds ->
+            case eff of
+                Load cmds2 ->
+                    Load (cmds ++ cmds2)
+
+                Succeed _ ->
+                    Load cmds
+
+                Fail _ ->
+                    Load cmds
+
+        _ ->
+            eff
 
 
-run : (List cmd -> cmds) -> (a -> ( model, cmds )) -> (e -> ( model, cmds )) -> Effect e a model cmd -> ( model, cmds )
-run combine handleSuccess handleFailure effect =
+map fn =
+    andThen (fn >> Succeed)
+
+
+map2 fn eff1 eff2 =
+    case ( eff1, eff2 ) of
+        ( Load cmds1, Load cmds2 ) ->
+            Load (cmds1 ++ cmds2)
+
+        ( _, Load cmds ) ->
+            Load cmds
+
+        ( Load cmds, _ ) ->
+            Load cmds
+
+        _ ->
+            eff2
+
+
+combine effects =
+      List.foldl (map2 (::)) (pure []) effects
+
+
+do a b = 
+    andThen b a
+
+
+andThen fn effect =
     case effect of
-        Perform ( model, cmdList ) ->
-            ( model, combine cmdList )
-
         Succeed a ->
-            handleSuccess a
-
-        Fail e ->
-            handleFailure e
-
-
-with : a -> (a -> b) -> b
-with a fn =
-    fn a
-
-
-do : (model -> Effect e a model cmd) -> (a -> model -> Effect e b model cmd) -> model -> Effect e b model cmd
-do toState cb model =
-    case toState model of
-        Succeed a -> 
-            cb a model
-
-        Perform p ->
-            Perform p
+            fn a
 
         Fail e ->
             Fail e
 
-
-mapTo : b -> (model -> Effect e a model cmd) -> model -> Effect e b model cmd
-mapTo x toState model =
-    case toState model of
-        Succeed _ ->
-            Succeed x
-
-        Perform p ->
-            Perform p
-
-        Fail e ->
-            Fail e
+        Load cmds ->
+            Load cmds
 
 
-sequence : (x -> model -> Effect e a model cmd) -> List x -> model -> Effect e (List a) model cmd
-sequence toState list model =
-    let
-        sequence_ acc list_ =
-            case acc of
-                Succeed xs ->
-                    case list_ of
-                        [] ->
-                            acc
+withDefault default effect =
+    case effect of
+        Succeed a ->
+            a
 
-                        x :: rest ->
-                            case toState x model of
-                                Succeed a ->
-                                    sequence_ (Succeed (a :: xs)) rest
-
-                                Fail e ->
-                                    Fail e
-                                    -- TODO: Should it really fail here?
-                                    -- It should probably continue without adding the item
-                                    -- sequence_ (Succeed xs) rest
-
-                                Perform p ->
-                                    Perform p
-                _ ->
-                    acc
-    in
-    sequence_ (Succeed []) list
+        _ ->
+            default
 
 
-race toState list model =
-    Debug.todo "Not implmented"
+toCmds effect = 
+    case effect of
+        Load cmds ->
+            Cmd.batch cmds
 
-
-all : (x -> model -> Effect e a model cmd) -> List x -> model -> Effect e (List a) model cmd
-all toState list initModel =
-    List.foldl (\x acc ->
-        case acc of
-            Perform ( m0, c0 ) ->
-                case toState x m0 of
-                    Perform ( m1, c1 ) ->
-                        Perform ( m1, c0 ++ c1 )
-
-                    _ ->
-                        acc
-
-            Succeed ys ->
-                case toState x initModel of
-                    Perform ( m1, c1 ) ->
-                        Perform ( m1, c1 )
-
-                    Succeed y ->
-                        Succeed (y :: ys)
-
-                    Fail e ->
-                        Fail e
-            _ ->
-                acc
-    )
-    (Succeed [])
-    list
+        _ ->
+            Cmd.batch []

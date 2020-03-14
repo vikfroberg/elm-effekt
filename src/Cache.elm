@@ -17,7 +17,19 @@ get id (Cache list) =
         |> List.head 
         |> Maybe.map Tuple.second
 
+
 set : id -> a -> Cache id a -> Cache id a
 set id a (Cache list) = 
     ( id, a ) :: List.filter (Tuple.first >> (/=) id) list
+        |> Cache
+
+
+update : id -> (Maybe a -> Maybe a) -> Cache id a -> Cache id a
+update id fn (Cache list) = 
+    get id (Cache list)
+        |> fn
+        |> Maybe.map (Tuple.pair id)
+        |> List.singleton
+        |> List.filterMap identity
+        |> List.append (List.filter (Tuple.first >> (/=) id) list)
         |> Cache

@@ -1,6 +1,19 @@
-module Remote exposing (..)
+module Remote exposing 
+    ( Remote
+    , pure
+    , return
+    , empty
+    , loading
+    , withDefault
+    , fromResult
+    , map
+    , andThen
+    , load
+    )
 
 import Effect exposing (Effect)
+import Focus exposing (Focus)
+import StateEffect exposing (StateEffect)
 
 
 type Remote e a 
@@ -8,6 +21,7 @@ type Remote e a
     | Loading
     | Error e
     | Found a
+
 
 
 pure : a -> Remote e a
@@ -20,6 +34,8 @@ return =
     pure
 
 
+-- TODO: If it has empty, should it have an append and what does that mean?
+-- Other name for empty probably...
 empty : Remote e a
 empty =
     NotAsked
@@ -28,6 +44,37 @@ empty =
 loading : Remote e a
 loading =
     Loading
+
+
+withDefault : a -> Remote e a -> a
+withDefault default remote =
+    case remote of
+        Found a ->
+            a
+
+        _ ->
+            default
+
+
+map : (a -> b) -> Remote e a -> Remote e b 
+map fn remote =
+    andThen (fn >> Found) remote
+
+
+andThen : (a -> Remote e b) -> Remote e a -> Remote e b 
+andThen fn remote =
+    case remote of
+        Found a ->
+            fn a
+
+        Loading ->
+            Loading
+
+        Error e ->
+            Error e
+
+        NotAsked ->
+            NotAsked
 
 
 fromResult : Result e a -> Remote e a
@@ -40,23 +87,27 @@ fromResult result =
             Error e
 
 
-load : cmd -> (model -> Remote e a) -> (Remote e a -> model -> model) -> model -> Effect e a model cmd
-load cmd get set model =
-    case get model of
-        NotAsked ->
-            ( set Loading model
-            , [ cmd ]
-            )
-            |> Effect.Perform
+load : Focus s (Remote e a) -> List cmd -> StateEffect s e a cmd
+load lens cmds = 
+    StateEffect.advance (\s ->
+        case Focus.get lens s of
+            NotAsked ->
+                ( Effect.load cmds
+                , Focus.set lens Loading s
+                )
 
-        Loading ->
-            ( model
-            , []
-            )
-            |> Effect.Perform
+            Loading ->
+                ( Effect.wait
+                , s
+                )
 
-        Found a ->
-            Effect.Succeed a
+            Error e ->
+                ( Effect.fail e
+                , s
+                )
 
-        Error e ->
-            Effect.Fail e
+            Found a ->
+                ( Effect.pure a
+                , s
+                )
+    )

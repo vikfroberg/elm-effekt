@@ -9,6 +9,8 @@ import Process
 import Effect exposing (Effect(..))
 import Repo exposing (Repo)
 import Remote exposing (Remote)
+import Focus exposing (Focus)
+import StateEffect
 
 
 type alias HttpError = ()
@@ -54,36 +56,40 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         RecvIndex result ->
-            setIndex (Remote.fromResult result) model
+            Focus.set indexLens (Remote.fromResult result) model
                 |> runEffects
 
         RecvItem id result ->
-            setItem id (Remote.fromResult result) model
+            model
+                |> Focus.update itemLens (Repo.set id (Remote.fromResult result))
                 |> runEffects
 
         RecvComment id result ->
-            setComment id (Remote.fromResult result) model
+            model
+                |> Focus.update commentLens (Repo.set id (Remote.fromResult result))
                 |> runEffects
 
 
 runEffects : Model -> ( Model, Cmd Msg )
 runEffects model =
-    effect
-        |> Effect.with model
-        |> Effect.run Cmd.batch (doNothing model) (doNothing model)
+    StateEffect.run model effect
+        |> toTEA
 
 
-effect : Model -> Effect HttpError () Model (Cmd Msg)
+toTEA ( eff, model ) =
+    ( model, Effect.toCmds eff )
+
+
 effect =
-    Effect.do loadIndex <| \ids ->
-    Effect.do (ids |> Effect.sequence loadItem) <| \items ->
-    Effect.do (items |> Effect.sequence (.comments >> Effect.all loadComment)) <| \_ ->
-        Effect.return ()
-
-
-doNothing : Model -> x -> ( Model, Cmd Msg )
-doNothing model _ =
-    ( model, Cmd.none )
+    let
+        commentsLoad item =
+            List.map commentLoad item.comments
+                |> StateEffect.combine
+    in
+    StateEffect.do indexLoad <| \ids ->
+    StateEffect.do (List.map itemLoad ids |> StateEffect.sequence) <| \items ->
+    StateEffect.do (List.map commentsLoad items |> StateEffect.sequence) <| \_ ->
+        StateEffect.pure ()
 
 
 view : Model -> { title : String, body : List (Html Msg) }
@@ -101,53 +107,38 @@ view model =
 
 -- Index
 
-getIndex : Model -> Remote HttpError Index
-getIndex = 
-    .index
+indexLens = 
+    Focus.create .index (\fn m -> { m | index = fn m.index })
 
-setIndex : Remote HttpError Index -> Model -> Model
-setIndex x model = 
-    { model | index = x }
+indexFetch = 
+    [ msgToCmdWithDelay 1000 (RecvIndex <| Ok [ "1", "2", "3" ]) ]
 
-fetchIndex = 
-    msgToCmdWithDelay 1000 (RecvIndex <| Ok [ "1", "2", "3" ])
-
-loadIndex =
-    Remote.load fetchIndex getIndex setIndex
+indexLoad =
+    Remote.load indexLens indexFetch
 
 
 -- Item
 
-getItem : Id -> Model -> Remote HttpError Item
-getItem id model = 
-    Repo.get id model.item 
+itemLens = 
+    Focus.create .item (\fn m -> { m | item = fn m.item })
 
-setItem : Id -> Remote HttpError Item -> Model -> Model
-setItem id x model = 
-    { model | item = Repo.set id x model.item }
+itemFetch id = 
+    [ msgToCmdWithDelay 1000 (RecvItem id <| Ok { id = id, comments = [ "1", "2", "3" ] }) ]
 
-fetchItem id = 
-    msgToCmdWithDelay 1000 (RecvItem id <| Ok { id = id, comments = [ "1", "2", "3" ] })
-
-loadItem =
-    Repo.load fetchItem getItem setItem 
+itemLoad =
+    Repo.load itemLens itemFetch
 
 
 -- Comment
 
-getComment : Id -> Model -> Remote HttpError Comment
-getComment id model = 
-    Repo.get id model.comment 
+commentLens = 
+    Focus.create .comment (\fn m -> { m | comment = fn m.comment })
 
-setComment : Id -> Remote HttpError Comment -> Model -> Model
-setComment id x model = 
-    { model | comment = Repo.set id x model.comment }
+commentFetch id = 
+    [ msgToCmdWithDelay 1000 (RecvComment id <| Ok { id = id }) ]
 
-fetchComment id = 
-    msgToCmdWithDelay 1000 (RecvComment id <| Ok { id = id })
-
-loadComment =
-    Repo.load fetchComment getComment setComment 
+commentLoad =
+    Repo.load commentLens commentFetch
 
 
 -- Helpers
