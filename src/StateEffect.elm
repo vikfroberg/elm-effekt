@@ -17,7 +17,7 @@ advance fn =
         |> StateEffect
 
 
-pure a = 
+return a = 
     State.map (always <| Succeed a) State.get
         |> StateEffect
 
@@ -48,12 +48,8 @@ andThen fn (StateEffect state) =
         |> StateEffect
 
 
-mapEffect fn state =
-    State.map fn state
-
-
 map fn =
-    andThen (fn >> pure)
+    andThen (fn >> return)
 
 
 map2 fn (StateEffect s1) (StateEffect s2) =
@@ -64,15 +60,15 @@ map2 fn (StateEffect s1) (StateEffect s2) =
 seq2 fn s1 s2 =
     do s2 <| \eff1 ->
     do s1 <| \eff2 ->
-        pure (fn eff2 eff1)
+        return (fn eff2 eff1)
 
 
 sequence states =
-    List.foldl (seq2 (::)) (pure []) states
+    List.foldl (seq2 (::)) (return []) states
 
 
 combine states =
-    List.foldl (map2 (::)) (pure []) states
+    List.foldl (map2 (::)) (return []) states
 
 
 -- race = Debug.todo "implement" 

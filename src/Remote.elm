@@ -1,8 +1,7 @@
 module Remote exposing 
     ( Remote
-    , pure
     , return
-    , empty
+    , notAsked
     , loading
     , withDefault
     , fromResult
@@ -24,20 +23,13 @@ type Remote e a
 
 
 
-pure : a -> Remote e a
-pure = 
+return : a -> Remote e a
+return = 
     Found
 
 
-return : a -> Remote e a
-return = 
-    pure
-
-
--- TODO: If it has empty, should it have an append and what does that mean?
--- Other name for empty probably...
-empty : Remote e a
-empty =
+notAsked : Remote e a
+notAsked =
     NotAsked
 
 
@@ -107,7 +99,7 @@ load lens cmds =
                 )
 
             Found a ->
-                ( Effect.pure a
+                ( Effect.return a
                 , s
                 )
     )

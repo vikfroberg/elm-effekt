@@ -45,7 +45,7 @@ main =
 
 init : ( Model, Cmd Msg )
 init =
-    { index = Remote.empty
+    { index = Remote.notAsked
     , item = Repo.empty
     , comment = Repo.empty
     }
@@ -56,7 +56,8 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         RecvIndex result ->
-            Focus.set indexLens (Remote.fromResult result) model
+            model
+                |> Focus.set indexLens (Remote.fromResult result)
                 |> runEffects
 
         RecvItem id result ->
@@ -89,7 +90,7 @@ effect =
     StateEffect.do indexLoad <| \ids ->
     StateEffect.do (List.map itemLoad ids |> StateEffect.sequence) <| \items ->
     StateEffect.do (List.map commentsLoad items |> StateEffect.sequence) <| \_ ->
-        StateEffect.pure ()
+        StateEffect.return ()
 
 
 view : Model -> { title : String, body : List (Html Msg) }

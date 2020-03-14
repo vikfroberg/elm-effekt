@@ -18,7 +18,7 @@ empty =
 get : id -> Repo id e a -> Remote e a
 get id (Repo cache) = 
     Dict.get id cache
-        |> Maybe.withDefault Remote.empty
+        |> Maybe.withDefault Remote.notAsked
 
 
 set : id -> Remote e a -> Repo id e a -> Repo id e a

@@ -8,7 +8,7 @@ type Effect e a cmd
 
 
 wait = Load []
-pure a = Succeed a
+return a = Succeed a
 fail e = Fail e
 load cmds = Load cmds
 
@@ -50,7 +50,7 @@ map2 fn eff1 eff2 =
 
 
 combine effects =
-      List.foldl (map2 (::)) (pure []) effects
+      List.foldl (map2 (::)) (return []) effects
 
 
 do a b = 
