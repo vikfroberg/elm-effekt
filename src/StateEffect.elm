@@ -1,6 +1,6 @@
 module StateEffect exposing (..)
 
-import Effect exposing (Effect(..))
+import Effect exposing (Effect)
 import State exposing (State)
 
 
@@ -8,68 +8,104 @@ type StateEffect s e a cmd
     = StateEffect (State s (Effect e a cmd))
 
 
+flip ( a, b ) = 
+    ( b, a )
+
+
+run : s -> StateEffect s e a cmd -> ( s, Effect e a cmd )
 run s (StateEffect state) = 
     State.run s state
+        |> flip
 
 
-advance fn = 
-    State.advance fn
+advance : (s -> ( s, Effect e a cmd )) -> StateEffect s e a cmd
+advance f = 
+    State.advance (f >> flip)
         |> StateEffect
 
 
+return : a -> StateEffect s e a cmd
 return a = 
-    State.map (always <| Succeed a) State.get
+    State.map (always <| Effect.succeed a) State.get
         |> StateEffect
 
 
-do a b = 
-    andThen b a
+
+do : StateEffect s e a cmd -> (a -> StateEffect s e b cmd) -> StateEffect s e b cmd
+do a f = 
+    andThen f a
+
+
+unwrap (StateEffect state) =
+    state
 
 
 andThen : (a -> StateEffect s e b cmd) -> StateEffect s e a cmd -> StateEffect s e b cmd
-andThen fn (StateEffect state) =
+andThen f (StateEffect state) =
     State.andThen (\effect ->
-        case effect of
-            Succeed a ->
-                let
-                    (StateEffect newState) = fn a 
-                in
-                newState
+        let
+            newEffect =
+                Effect.map f effect
+        in
+        case (effect |> Effect.map Just |> Effect.withDefault Nothing) of
+            Just a ->
+                f a
 
-            Fail e ->
-                state
-                    |> State.map (Effect.append (Fail e))
-
-            Load cmds ->
-                state
-                    |> State.map (Effect.append (Load cmds))
+            Nothing
+            |> Effect.map (f >> unwrap)
+            |> Effect.withDefault (state |> State.map (Effect.append effect))
     )
     state
-        |> StateEffect
+    |> StateEffect
 
 
-map fn =
-    andThen (fn >> return)
+map : (a -> b) -> StateEffect s e a cmd -> StateEffect s e b cmd
+map f =
+    andThen (f >> return)
 
 
-map2 fn (StateEffect s1) (StateEffect s2) =
-    State.map2 (Effect.map2 fn) s1 s2
-        |> StateEffect
+map2 :
+    (a -> b -> c) 
+    -> StateEffect s e a cmd 
+    -> StateEffect s e b cmd 
+    -> StateEffect s e c cmd
+map2 f a b =
+    map f a
+        |> andMap b
 
 
-seq2 fn s1 s2 =
-    do s2 <| \eff1 ->
-    do s1 <| \eff2 ->
-        return (fn eff2 eff1)
+-- waitAll : List (StateEffect s e a cmd) -> StateEffect s e (List a) cmd
+-- waitAll states =
+--       List.foldr (wait2 (::)) (return []) states
 
 
-sequence states =
-    List.foldl (seq2 (::)) (return []) states
+-- wait2 : (a -> b -> c) -> StateEffect s e a cmd -> StateEffect s e b cmd -> StateEffect s e c cmd
+-- wait2 f sa sb =
+--     case ( sa, sb ) of
+--         ( Succeed a, Succeed b ) ->
+--             Succeed (f a b)
+
+--         _ ->
+--             append 
+--                 (map2 f sa empty)
+--                 (map2 f sa sb)
 
 
+ap : StateEffect s e (a -> b) cmd -> StateEffect s e a cmd -> StateEffect s e b cmd
+ap sf sa =
+    andThen (\f -> map f sa) sf
+
+
+andMap : StateEffect s e a cmd -> StateEffect s e (a -> b) cmd -> StateEffect s e b cmd
+andMap sa sf =
+    ap sf sa
+
+
+combine : List (StateEffect s e a cmd) -> StateEffect s e (List a) cmd
 combine states =
     List.foldl (map2 (::)) (return []) states
 
 
--- race = Debug.todo "implement" 
--- or = Debug.todo "implement"
+
+sequence : List (StateEffect s e a cmd) -> StateEffect s e (List a) cmd
+sequence = combine

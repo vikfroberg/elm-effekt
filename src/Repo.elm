@@ -1,4 +1,12 @@
-module Repo exposing (..)
+module Repo exposing 
+    ( Repo
+    , empty
+    , get
+    , set
+    , update
+    , load
+    , toLens
+    )
 
 import Remote exposing (Remote)
 import AssocList as Dict exposing (Dict)
@@ -27,11 +35,6 @@ set id a (Repo cache) =
         |> Repo
 
 
-toLens : id -> Focus (Repo id e a) (Remote e a)
-toLens id = 
-    Focus.create (get id) (update id)
-
-
 update : id -> (Remote e a -> Remote e a) -> Repo id e a -> Repo id e a
 update id fn (Repo cache) = 
     set id (fn <| get id (Repo cache)) (Repo cache)
@@ -40,3 +43,8 @@ update id fn (Repo cache) =
 load : Focus s (Repo id e a) -> (id -> List cmd) -> id -> StateEffect s e a cmd
 load lens toCmds id =
     Remote.load (Focus.compose lens <| toLens id) (toCmds id)
+
+
+toLens : id -> Focus (Repo id e a) (Remote e a)
+toLens id = 
+    Focus.create (get id) (update id)

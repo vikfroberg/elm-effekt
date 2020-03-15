@@ -56,18 +56,24 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         RecvIndex result ->
-            model
-                |> Focus.set indexLens (Remote.fromResult result)
+            Focus.update 
+                indexLens 
+                (Remote.append <| Remote.fromResult result)
+                model
                 |> runEffects
 
         RecvItem id result ->
-            model
-                |> Focus.update itemLens (Repo.set id (Remote.fromResult result))
+            Focus.update 
+                itemLens 
+                (Repo.update id (Remote.append <| Remote.fromResult result))
+                model
                 |> runEffects
 
         RecvComment id result ->
-            model
-                |> Focus.update commentLens (Repo.set id (Remote.fromResult result))
+            Focus.update 
+                commentLens 
+                (Repo.update id (Remote.append <| Remote.fromResult result))
+                model
                 |> runEffects
 
 
