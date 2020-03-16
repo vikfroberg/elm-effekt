@@ -11,7 +11,7 @@ module Repo exposing
 import Remote exposing (Remote)
 import AssocList as Dict exposing (Dict)
 import Focus exposing (Focus)
-import StateEffect exposing (StateEffect)
+import Control exposing (Control)
 
 
 type Repo id e a
@@ -40,7 +40,7 @@ update id fn (Repo cache) =
     set id (fn <| get id (Repo cache)) (Repo cache)
 
 
-load : Focus s (Repo id e a) -> (id -> List cmd) -> id -> StateEffect s e a cmd
+load : Focus model (Repo id e a) -> (id -> Cmd msg) -> id -> Control model e a ( model, Cmd msg )
 load lens toCmds id =
     Remote.load (Focus.compose lens <| toLens id) (toCmds id)
 

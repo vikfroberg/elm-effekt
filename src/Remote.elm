@@ -1,34 +1,26 @@
 module Remote exposing 
     ( Remote
-
     , notAsked
     , loading
     , error
     , found
     , fromResult
     , withDefault
-
     , map
-
     , andThen
     , do
-
     , empty
     , append
     , concat
-
     , map2
     , map3
     , andMap
-    , ap
     , combine
-
     , load
     )
 
-import Effect exposing (Effect)
+import Control exposing (Control)
 import Focus exposing (Focus)
-import StateEffect exposing (StateEffect)
 
 
 type Remote e a 
@@ -138,14 +130,9 @@ map5 f a b c d e =
         |> andMap e
 
 
-ap : Remote e (a -> b) -> Remote e a -> Remote e b
-ap rf ra =
-    andThen (\f -> map f ra) rf
-
-
 andMap : Remote e a -> Remote e (a -> b) -> Remote e b
 andMap ra rf = 
-    ap rf ra
+    andThen (\f -> map f ra) rf
 
 
 combine : List (Remote e a) -> Remote e (List a)
@@ -228,27 +215,22 @@ do ea fn =
     andThen fn ea
 
 
-load : Focus s (Remote e a) -> List cmd -> StateEffect s e a cmd
+load : Focus model (Remote e a) -> Cmd msg -> Control model e a ( model, Cmd msg )
 load lens cmds = 
-    StateEffect.advance (\s ->
+    Control.create (\s ->
         case Focus.get lens s of
             NotAsked ->
-                ( Effect.perform cmds
-                , Focus.set lens Loading s
-                )
+                Control.perform 
+                    ( Focus.set lens Loading s
+                    , cmds
+                    )
 
             Loading ->
-                ( Effect.wait
-                , s
-                )
+                Control.perform ( s, Cmd.none )
 
             Error e ->
-                ( Effect.fail e
-                , s
-                )
+                Control.fail e
 
             Found a ->
-                ( Effect.succeed a
-                , s
-                )
+                Control.succeed a
     )

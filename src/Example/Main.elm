@@ -10,7 +10,8 @@ import Effect exposing (Effect(..))
 import Repo exposing (Repo)
 import Remote exposing (Remote)
 import Focus exposing (Focus)
-import StateEffect
+import Control exposing (Control)
+import Control.Async
 
 
 type alias HttpError = ()
@@ -79,24 +80,19 @@ update msg model =
 
 runEffects : Model -> ( Model, Cmd Msg )
 runEffects model =
-    StateEffect.run model effect
-        |> toTEA
-
-
-toTEA ( eff, model ) =
-    ( model, Effect.toCmds eff )
+    Control.run model effect
 
 
 effect =
     let
         commentsLoad item =
             List.map commentLoad item.comments
-                |> StateEffect.combine
+                |> Control.Async.combine
     in
-    StateEffect.do indexLoad <| \ids ->
-    StateEffect.do (List.map itemLoad ids |> StateEffect.sequence) <| \items ->
-    StateEffect.do (List.map commentsLoad items |> StateEffect.sequence) <| \_ ->
-        StateEffect.return ()
+    Control.do indexLoad <| \ids ->
+    Control.do (List.map itemLoad ids |> Control.sequence) <| \items ->
+    Control.do (List.map commentsLoad items |> Control.sequence) <| \_ ->
+        Control.succeed ()
 
 
 view : Model -> { title : String, body : List (Html Msg) }
@@ -118,7 +114,7 @@ indexLens =
     Focus.create .index (\fn m -> { m | index = fn m.index })
 
 indexFetch = 
-    [ msgToCmdWithDelay 1000 (RecvIndex <| Ok [ "1", "2", "3" ]) ]
+    msgToCmdWithDelay 1000 (RecvIndex <| Ok [ "1", "2", "3" ])
 
 indexLoad =
     Remote.load indexLens indexFetch
@@ -130,7 +126,7 @@ itemLens =
     Focus.create .item (\fn m -> { m | item = fn m.item })
 
 itemFetch id = 
-    [ msgToCmdWithDelay 1000 (RecvItem id <| Ok { id = id, comments = [ "1", "2", "3" ] }) ]
+    msgToCmdWithDelay 1000 (RecvItem id <| Ok { id = id, comments = [ "1", "2", "3" ] })
 
 itemLoad =
     Repo.load itemLens itemFetch
@@ -142,7 +138,7 @@ commentLens =
     Focus.create .comment (\fn m -> { m | comment = fn m.comment })
 
 commentFetch id = 
-    [ msgToCmdWithDelay 1000 (RecvComment id <| Ok { id = id }) ]
+    msgToCmdWithDelay 1000 (RecvComment id <| Ok { id = id })
 
 commentLoad =
     Repo.load commentLens commentFetch

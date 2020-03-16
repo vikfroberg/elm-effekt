@@ -1,39 +1,46 @@
 module Effect exposing (..)
 
 
-type Effect e a cmd
+type Effect e a return
     = Succeed a
     | Fail e
-    | Perform (List cmd)
-    | Empty
+    | Perform return
+
+
+run : return -> Effect e a return -> return
+run default fa =
+    case fa of
+        Perform return ->
+            return
+
+        _ ->
+            default
 
 
 -- Constructors
 
 
-wait : Effect e a cmd
-wait = 
-    Perform []
-
-
-succeed : a -> Effect e a cmd
+succeed : a -> Effect e a return
 succeed a = 
     Succeed a
 
 
-fail : e -> Effect e a cmd
+fail : e -> Effect e a return
 fail e = 
     Fail e
 
 
-perform : List cmd -> Effect e a cmd
-perform cmds = 
-    Perform cmds
+perform : return -> Effect e a return
+perform return = 
+    Perform return
 
 
-withDefault : a -> Effect e a cmd -> a
-withDefault default effect =
-    case effect of
+-- Helpers
+
+
+withDefault : a -> Effect e a return -> a
+withDefault default fa =
+    case fa of
         Succeed a ->
             a
 
@@ -41,96 +48,32 @@ withDefault default effect =
             default
 
 
-toResult : Effect e a cmd -> 
-
-
--- onError
-
-
--- Monoid
-
-
-empty : Effect e a cmd
-empty = Empty
-
-
-concat : List (Effect e a cmd) -> Effect e a cmd
-concat es =
-    List.foldr append empty es
-
-
-append : Effect e a cmd -> Effect e a cmd -> Effect e a cmd
-append eff acc =
-    case acc of
-        Empty ->
-            eff
-
-        Fail e ->
-            Fail e
-
-        Succeed a ->
-            case eff of
-                Perform cmds ->
-                    Perform cmds
-
-                _ ->
-                    Succeed a
-
-        Perform cmds ->
-            case eff of
-                Perform cmds2 ->
-                    Perform (cmds ++ cmds2)
-
-                Succeed _ ->
-                    Perform cmds
-
-                Fail _ ->
-                    Perform cmds
-
-                Empty ->
-                    Perform cmds
-
-
-fold : { concat : List cmd -> cmds, empty : cmds } -> Effect e a cmd -> cmds
-fold monoid effect = 
-    case effect of
-        Perform cmds ->
-            monoid.concat cmds
-
-        _ ->
-            monoid.empty
-
 -- Functor
 
 
-map : (a -> b) -> Effect e a cmd -> Effect e b cmd
+map : (a -> b) -> Effect e a return -> Effect e b return
 map f =
     andThen (f >> Succeed)
 
 
-mapError : (e -> r) -> Effect e a cmd -> Effect r a cmd
-mapError f a =
-    onError (f >> fail) a
+mapError : (e -> r) -> Effect e a return -> Effect r a return
+mapError f fa =
+    onError (f >> Fail) fa
 
 
 -- Applicative
 
 
-ap : Effect e (a -> b) cmd -> Effect e a cmd -> Effect e b cmd
-ap ef ea =
-    andThen (\f -> map f ea) ef
-
-
-andMap : Effect e a cmd -> Effect e (a -> b) cmd -> Effect e b cmd
-andMap sa sf =
-    ap sf sa
+andMap : Effect e a return -> Effect e (a -> b) return -> Effect e b return
+andMap fa ff =
+    andThen (\f -> map f fa) ff
 
 
 map2 : 
     (a -> b -> c) 
-    -> Effect e a cmd 
-    -> Effect e b cmd 
-    -> Effect e c cmd
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
 map2 f a b =
     map f a
         |> andMap b
@@ -138,10 +81,10 @@ map2 f a b =
 
 map3 : 
     (a -> b -> c -> d) 
-    -> Effect e a cmd 
-    -> Effect e b cmd 
-    -> Effect e c cmd
-    -> Effect e d cmd
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+    -> Effect e d return
 map3 f a b c =
     map f a
         |> andMap b
@@ -150,11 +93,11 @@ map3 f a b c =
 
 map4 : 
     (a -> b -> c -> d -> e) 
-    -> Effect e a cmd 
-    -> Effect e b cmd 
-    -> Effect e c cmd
-    -> Effect e d cmd
-    -> Effect e e cmd
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+    -> Effect e d return
+    -> Effect e e return
 map4 f a b c d =
     map f a
         |> andMap b
@@ -164,12 +107,12 @@ map4 f a b c d =
 
 map5 : 
     (a -> b -> c -> d -> e -> f) 
-    -> Effect e a cmd 
-    -> Effect e b cmd 
-    -> Effect e c cmd
-    -> Effect e d cmd
-    -> Effect e e cmd
-    -> Effect e f cmd
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+    -> Effect e d return
+    -> Effect e e return
+    -> Effect e f return
 map5 f a b c d e =
     map f a
         |> andMap b
@@ -178,67 +121,35 @@ map5 f a b c d e =
         |> andMap e
 
 
-waitAll : List (Effect e a cmd) -> Effect e (List a) cmd
-waitAll es =
-      List.foldr (wait2 (::)) (succeed []) es
-
-
-wait2 : (a -> b -> c) -> Effect e a cmd -> Effect e b cmd -> Effect e c cmd
-wait2 f ea eb =
-    case ( ea, eb ) of
-        ( Succeed a, Succeed b ) ->
-            Succeed (f a b)
-
-        _ ->
-            append 
-                (map2 f ea empty)
-                (map2 f ea eb)
-
-
-combine : List (Effect e a cmd) -> Effect e (List a) cmd
-combine eas =
-      List.foldr (map2 (::)) (succeed []) eas
-
-
-sequence : List (Effect e a cmd) -> Effect e (List a) cmd
-sequence = combine
+combine : List (Effect e a return) -> Effect e (List a) return
+combine xs =
+      List.foldr (map2 (::)) (succeed []) xs
 
 
 -- Monad
 
 
-onError : (e -> Effect r a cmd) -> Effect e a cmd -> Effect r a cmd
-onError f ea =
-    case ea of
-        Empty ->
-            Empty
-
+onError : (e -> Effect r a return) -> Effect e a return -> Effect r a return
+onError f fa =
+    case fa of
         Succeed a ->
             Succeed a
 
         Fail e ->
             f e
 
-        Perform cmds ->
-            Perform cmds
+        Perform return ->
+            Perform return
 
 
-andThen : (a -> Effect e b cmd) -> Effect e a cmd ->  Effect e b cmd
-andThen f ea =
-    case ea of
-        Empty ->
-            Empty
-
+andThen : (a -> Effect e b return) -> Effect e a return ->  Effect e b return
+andThen f fa =
+    case fa of
         Succeed a ->
             f a
 
         Fail e ->
             Fail e
 
-        Perform cmds ->
-            Perform cmds
-
-
-do : Effect e a cmd -> (a -> Effect e b cmd) -> Effect e b cmd
-do ea fn = 
-    andThen fn ea
+        Perform return ->
+            Perform return
