@@ -7,7 +7,9 @@ module Remote exposing
     , fromResult
     , withDefault
     , map
+    , mapError
     , andThen
+    , onError
     , do
     , empty
     , append
@@ -191,14 +193,35 @@ map fn remote =
     andThen (fn >> Found) remote
 
 
+mapError : (e -> r) -> Remote e a -> Remote r a 
+mapError f fa =
+    onError (f >> Error) fa
+
+
 -- Monad 
 
 
+onError : (e -> Remote r a) -> Remote e a -> Remote r a
+onError f fa =
+    case fa of
+        Found a ->
+            Found a
+
+        Error e ->
+            f e
+
+        Loading ->
+            Loading 
+
+        NotAsked ->
+            NotAsked 
+
+
 andThen : (a -> Remote e b) -> Remote e a -> Remote e b 
-andThen fn remote =
+andThen f remote =
     case remote of
         Found a ->
-            fn a
+            f a
 
         Loading ->
             Loading
