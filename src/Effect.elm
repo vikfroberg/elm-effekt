@@ -1,121 +1,155 @@
 module Effect exposing (..)
 
 
-type Effect e a model cmd
-    = Perform ( model, List cmd )
+type Effect e a return
+    = Succeed a
     | Fail e
-    | Succeed a
+    | Perform return
 
 
-pure = 
-    Succeed >> always
+run : return -> Effect e a return -> return
+run default fa =
+    case fa of
+        Perform return ->
+            return
+
+        _ ->
+            default
 
 
-return = 
-    pure
+-- Constructors
 
 
-run : (List cmd -> cmds) -> (a -> ( model, cmds )) -> (e -> ( model, cmds )) -> Effect e a model cmd -> ( model, cmds )
-run combine handleSuccess handleFailure effect =
-    case effect of
-        Perform ( model, cmdList ) ->
-            ( model, combine cmdList )
+succeed : a -> Effect e a return
+succeed a = 
+    Succeed a
 
+
+fail : e -> Effect e a return
+fail e = 
+    Fail e
+
+
+perform : return -> Effect e a return
+perform return = 
+    Perform return
+
+
+-- Helpers
+
+
+withDefault : a -> Effect e a return -> a
+withDefault default fa =
+    case fa of
         Succeed a ->
-            handleSuccess a
+            a
+
+        _ ->
+            default
+
+
+-- Functor
+
+
+map : (a -> b) -> Effect e a return -> Effect e b return
+map f =
+    andThen (f >> Succeed)
+
+
+mapError : (e -> r) -> Effect e a return -> Effect r a return
+mapError f fa =
+    onError (f >> Fail) fa
+
+
+-- Applicative
+
+
+andMap : Effect e a return -> Effect e (a -> b) return -> Effect e b return
+andMap fa ff =
+    andThen (\f -> map f fa) ff
+
+
+map2 : 
+    (a -> b -> c) 
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+map2 f a b =
+    map f a
+        |> andMap b
+        
+
+map3 : 
+    (a -> b -> c -> d) 
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+    -> Effect e d return
+map3 f a b c =
+    map f a
+        |> andMap b
+        |> andMap c
+
+
+map4 : 
+    (a -> b -> c -> d -> e) 
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+    -> Effect e d return
+    -> Effect e e return
+map4 f a b c d =
+    map f a
+        |> andMap b
+        |> andMap c
+        |> andMap d
+
+
+map5 : 
+    (a -> b -> c -> d -> e -> f) 
+    -> Effect e a return 
+    -> Effect e b return 
+    -> Effect e c return
+    -> Effect e d return
+    -> Effect e e return
+    -> Effect e f return
+map5 f a b c d e =
+    map f a
+        |> andMap b
+        |> andMap c
+        |> andMap d
+        |> andMap e
+
+
+combine : List (Effect e a return) -> Effect e (List a) return
+combine xs =
+      List.foldr (map2 (::)) (succeed []) xs
+
+
+-- Monad
+
+
+onError : (e -> Effect r a return) -> Effect e a return -> Effect r a return
+onError f fa =
+    case fa of
+        Succeed a ->
+            Succeed a
 
         Fail e ->
-            handleFailure e
+            f e
+
+        Perform return ->
+            Perform return
 
 
-with : a -> (a -> b) -> b
-with a fn =
-    fn a
-
-
-do : (model -> Effect e a model cmd) -> (a -> model -> Effect e b model cmd) -> model -> Effect e b model cmd
-do toState cb model =
-    case toState model of
-        Succeed a -> 
-            cb a model
-
-        Perform p ->
-            Perform p
+andThen : (a -> Effect e b return) -> Effect e a return ->  Effect e b return
+andThen f fa =
+    case fa of
+        Succeed a ->
+            f a
 
         Fail e ->
             Fail e
 
-
-mapTo : b -> (model -> Effect e a model cmd) -> model -> Effect e b model cmd
-mapTo x toState model =
-    case toState model of
-        Succeed _ ->
-            Succeed x
-
-        Perform p ->
-            Perform p
-
-        Fail e ->
-            Fail e
-
-
-sequence : (x -> model -> Effect e a model cmd) -> List x -> model -> Effect e (List a) model cmd
-sequence toState list model =
-    let
-        sequence_ acc list_ =
-            case acc of
-                Succeed xs ->
-                    case list_ of
-                        [] ->
-                            acc
-
-                        x :: rest ->
-                            case toState x model of
-                                Succeed a ->
-                                    sequence_ (Succeed (a :: xs)) rest
-
-                                Fail e ->
-                                    Fail e
-                                    -- TODO: Should it really fail here?
-                                    -- It should probably continue without adding the item
-                                    -- sequence_ (Succeed xs) rest
-
-                                Perform p ->
-                                    Perform p
-                _ ->
-                    acc
-    in
-    sequence_ (Succeed []) list
-
-
-race toState list model =
-    Debug.todo "Not implmented"
-
-
-all : (x -> model -> Effect e a model cmd) -> List x -> model -> Effect e (List a) model cmd
-all toState list initModel =
-    List.foldl (\x acc ->
-        case acc of
-            Perform ( m0, c0 ) ->
-                case toState x m0 of
-                    Perform ( m1, c1 ) ->
-                        Perform ( m1, c0 ++ c1 )
-
-                    _ ->
-                        acc
-
-            Succeed ys ->
-                case toState x initModel of
-                    Perform ( m1, c1 ) ->
-                        Perform ( m1, c1 )
-
-                    Succeed y ->
-                        Succeed (y :: ys)
-
-                    Fail e ->
-                        Fail e
-            _ ->
-                acc
-    )
-    (Succeed [])
-    list
+        Perform return ->
+            Perform return
