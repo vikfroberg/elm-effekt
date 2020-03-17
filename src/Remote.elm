@@ -1,5 +1,5 @@
 module Remote exposing 
-    ( Remote
+    ( Remote(..)
     , notAsked
     , loading
     , error
@@ -16,6 +16,8 @@ module Remote exposing
     , concat
     , map2
     , map3
+    , map4
+    , map5
     , andMap
     , combine
     , load
